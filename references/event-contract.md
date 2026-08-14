@@ -147,7 +147,8 @@ preliminary analysis до первой фактической передачи �
 - `elapsed_seconds` — полное окно;
 - `calendar_elapsed_seconds` — явный alias полного календарного окна;
 - `business_elapsed_seconds` — объединение project working windows и реально
-  наблюдаемой работы за вычетом отложенного WIP;
+  наблюдаемой работы за вычетом отложенного WIP; вне working windows считается
+  только фактическая активность, поэтому ночные паузы отдельно отмечать не нужно;
 - `scheduled_nonworking_seconds`, `off_schedule_active_seconds` и
   `deferred_seconds` — разложение календарного срока;
 - `ready_for_handoff_at`, `handoff_wait_seconds` и
