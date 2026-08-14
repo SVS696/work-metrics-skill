@@ -135,6 +135,69 @@ def validate_window_rules(value: Any, *, field: str) -> None:
             raise WorkMetricsError(f"{label} must finish after it starts on the same day")
 
 
+def validate_daily_window_rules(value: Any, *, field: str) -> None:
+    if not isinstance(value, list):
+        raise WorkMetricsError(f"{field} must be an array")
+    for index, rule in enumerate(value, start=1):
+        label = f"{field}[{index}]"
+        if not isinstance(rule, dict):
+            raise WorkMetricsError(f"{label} must be an object")
+        start = parse_clock(rule.get("start"), field=f"{label}.start")
+        end = parse_clock(rule.get("end"), field=f"{label}.end")
+        if end <= start:
+            raise WorkMetricsError(f"{label} must finish after it starts on the same day")
+
+
+def validate_day_overrides(value: Any, *, field: str) -> None:
+    if not isinstance(value, list):
+        raise WorkMetricsError(f"{field} must be an array")
+    seen: set[date] = set()
+    for index, override in enumerate(value, start=1):
+        label = f"{field}[{index}]"
+        if not isinstance(override, dict):
+            raise WorkMetricsError(f"{label} must be an object")
+        try:
+            local_day = date.fromisoformat(override.get("date"))
+        except (TypeError, ValueError) as exc:
+            raise WorkMetricsError(f"{label}.date must be YYYY-MM-DD") from exc
+        if local_day in seen:
+            raise WorkMetricsError(f"{field} must not contain duplicate dates")
+        seen.add(local_day)
+        validate_daily_window_rules(
+            override.get("working_windows"), field=f"{label}.working_windows"
+        )
+        if override.get("handoff_windows") is not None:
+            validate_daily_window_rules(
+                override["handoff_windows"], field=f"{label}.handoff_windows"
+            )
+
+
+def validate_production_calendar(value: Any) -> None:
+    if not isinstance(value, dict) or value.get("schema") != 1:
+        raise WorkMetricsError("production_calendar has unsupported schema")
+    for field in ("provider", "country"):
+        if not isinstance(value.get(field), str) or not value[field].strip():
+            raise WorkMetricsError(f"production_calendar.{field} is required")
+    years = value.get("years")
+    if (
+        not isinstance(years, list)
+        or not years
+        or any(not isinstance(year, int) or isinstance(year, bool) for year in years)
+        or len(set(years)) != len(years)
+    ):
+        raise WorkMetricsError("production_calendar.years must contain unique years")
+    validate_day_overrides(
+        value.get("day_overrides", []), field="production_calendar.day_overrides"
+    )
+    if any(
+        date.fromisoformat(item["date"]).year not in years
+        for item in value.get("day_overrides", [])
+    ):
+        raise WorkMetricsError(
+            "production_calendar.day_overrides must belong to declared years"
+        )
+
+
 def validate_business_calendar(payload: Any) -> None:
     if not isinstance(payload, dict) or payload.get("schema") != CALENDAR_SCHEMA_VERSION:
         raise WorkMetricsError("business calendar has unsupported schema")
@@ -166,6 +229,59 @@ def validate_business_calendar(payload: Any) -> None:
         if parsed in seen:
             raise WorkMetricsError("business calendar holidays must not contain duplicates")
         seen.add(parsed)
+    production_calendar = payload.get("production_calendar")
+    if production_calendar is not None:
+        validate_production_calendar(production_calendar)
+    validate_day_overrides(payload.get("day_overrides", []), field="day_overrides")
+
+
+def day_override_map(
+    payload: dict[str, Any],
+) -> tuple[dict[date, dict[str, Any]], dict[date, dict[str, Any]]]:
+    production = payload.get("production_calendar") or {}
+    provider_overrides = {
+        date.fromisoformat(item["date"]): item
+        for item in production.get("day_overrides", [])
+    }
+    project_overrides = {
+        date.fromisoformat(item["date"]): item
+        for item in payload.get("day_overrides", [])
+    }
+    return provider_overrides, project_overrides
+
+
+def rules_for_day(
+    payload: dict[str, Any],
+    local_day: date,
+    *,
+    field: str,
+    provider_overrides: dict[date, dict[str, Any]],
+    project_overrides: dict[date, dict[str, Any]],
+    holidays: set[date],
+) -> tuple[list[dict[str, Any]], bool]:
+    production = payload.get("production_calendar")
+    if production is not None and local_day.year not in production["years"]:
+        raise WorkMetricsError(
+            f"production_calendar does not cover year {local_day.year}"
+        )
+    override = project_overrides.get(local_day)
+    if override is not None:
+        rules = override.get(field)
+        if rules is None:
+            rules = override["working_windows"]
+        return rules, True
+    if local_day in holidays:
+        return [], True
+    override = provider_overrides.get(local_day)
+    if override is not None:
+        rules = override.get(field)
+        if rules is None:
+            rules = override["working_windows"]
+        return rules, True
+    rules = payload.get(field)
+    if rules is None:
+        rules = payload["working_windows"]
+    return rules, False
 
 
 def calendar_intervals(
@@ -176,34 +292,39 @@ def calendar_intervals(
 ) -> list[Interval]:
     """Materialize project-local schedule windows intersecting one UTC interval."""
     validate_business_calendar(payload)
-    rules = payload.get(field)
-    if rules is None:
-        rules = payload["working_windows"]
     timezone = ZoneInfo(payload["timezone"])
     holidays = {date.fromisoformat(value) for value in payload.get("holidays", [])}
+    provider_overrides, project_overrides = day_override_map(payload)
     local_start = window[0].astimezone(timezone).date()
     local_end = window[1].astimezone(timezone).date()
     current = local_start
     intervals: list[Interval] = []
     while current <= local_end:
-        if current not in holidays:
-            weekday = current.isoweekday()
-            for rule in rules:
-                if weekday not in rule["weekdays"]:
-                    continue
-                start = datetime.combine(
-                    current,
-                    parse_clock(rule["start"], field=f"{field}.start"),
-                    tzinfo=timezone,
-                ).astimezone(UTC)
-                end = datetime.combine(
-                    current,
-                    parse_clock(rule["end"], field=f"{field}.end"),
-                    tzinfo=timezone,
-                ).astimezone(UTC)
-                clamped = clamp_interval((start, end), window)
-                if clamped:
-                    intervals.append(clamped)
+        day_rules, daily_override = rules_for_day(
+            payload,
+            current,
+            field=field,
+            provider_overrides=provider_overrides,
+            project_overrides=project_overrides,
+            holidays=holidays,
+        )
+        weekday = current.isoweekday()
+        for rule in day_rules:
+            if not daily_override and weekday not in rule["weekdays"]:
+                continue
+            start = datetime.combine(
+                current,
+                parse_clock(rule["start"], field=f"{field}.start"),
+                tzinfo=timezone,
+            ).astimezone(UTC)
+            end = datetime.combine(
+                current,
+                parse_clock(rule["end"], field=f"{field}.end"),
+                tzinfo=timezone,
+            ).astimezone(UTC)
+            clamped = clamp_interval((start, end), window)
+            if clamped:
+                intervals.append(clamped)
         current += timedelta(days=1)
     return merge_intervals(intervals)
 
