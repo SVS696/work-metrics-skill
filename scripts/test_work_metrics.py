@@ -71,6 +71,39 @@ def activity_values(result: dict[str, object]) -> dict[str, object]:
 
 
 class WorkMetricsTests(unittest.TestCase):
+    def test_night_work_counts_without_manual_pause_or_background_business_time(self) -> None:
+        calendar: dict[str, object] = {
+            "schema": 1,
+            "calendar_id": "project-1",
+            "timezone": "Europe/Moscow",
+            "working_windows": [
+                {"weekdays": [1, 2, 3, 4, 5], "start": "09:00", "end": "18:00"}
+            ],
+            "holidays": [],
+        }
+        result = work_metrics.reconcile(
+            bundle(
+                [
+                    source(
+                        "night-session",
+                        [
+                            pulse("late-work", "2026-08-14T22:00:00+03:00"),
+                            pulse("night-work", "2026-08-15T02:00:00+03:00"),
+                        ],
+                    )
+                ],
+                started_at="2026-08-14T21:00:00+03:00",
+                ended_at="2026-08-15T03:00:00+03:00",
+                business_calendar=calendar,
+            )
+        )
+        values = activity_values(result)
+        self.assertEqual(values["active_seconds"], 60)
+        self.assertEqual(values["business_elapsed_seconds"], 60)
+        self.assertEqual(values["off_schedule_active_seconds"], 60)
+        self.assertEqual(values["calendar_elapsed_seconds"], 6 * 3600)
+        self.assertEqual(values["explicit_pause_seconds"], 0)
+
     def test_business_calendar_excludes_weekend_and_deferral_but_keeps_real_work(self) -> None:
         calendar: dict[str, object] = {
             "schema": 1,
