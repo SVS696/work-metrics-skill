@@ -1,0 +1,4 @@
+interface:
+  display_name: "Work Metrics"
+  short_description: "Восстанавливает активность и считает метрики"
+  default_prompt: "Use $work-metrics to reconcile work activity from logs and produce auditable metrics."
