@@ -31,12 +31,31 @@
     "handoff_windows": [
       {"weekdays": [1, 2, 3, 4, 5], "start": "09:00", "end": "18:00"}
     ],
-    "holidays": []
+    "holidays": [],
+    "production_calendar": {
+      "schema": 1,
+      "provider": "isdayoff.ru",
+      "country": "ru",
+      "years": [2026],
+      "day_overrides": []
+    },
+    "day_overrides": []
   },
   "coverage_declaration": "complete",
   "sources": []
 }
 ```
+
+`production_calendar.day_overrides` — материализованный общий календарь страны:
+праздники, перенесённые рабочие дни и сокращённые окна. Его строит
+`scripts/production_calendar.py`; по умолчанию `isdayoff.ru` сверяется с
+`xmlcalendar.ru`, а расхождение блокирует запись. `holidays` и верхнеуровневые
+`day_overrides` принадлежат проекту и имеют приоритет над provider data.
+Если измеряемое окно выходит за перечисленные `years`, reconciliation завершается
+ошибкой до добавления следующего года, а не подменяет календарь обычной неделей.
+Персональные отпуска сюда не входят: не начатый work item не запускает таймер,
+передача другому владельцу закрывает текущий lifecycle, а ручная пауза остаётся
+явным исключением для уже активной, но сознательно отложенной работы.
 
 `cycle_kind` разделяет жизненные циклы одного результата. Для Vigers основной
 прогноз использует `initial-specification`: от начала approved execution после

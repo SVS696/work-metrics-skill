@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime
 
 import work_metrics
 
@@ -71,6 +72,121 @@ def activity_values(result: dict[str, object]) -> dict[str, object]:
 
 
 class WorkMetricsTests(unittest.TestCase):
+    def test_production_calendar_handles_holiday_transfer_and_shortened_day(self) -> None:
+        calendar: dict[str, object] = {
+            "schema": 1,
+            "calendar_id": "project-1",
+            "timezone": "Europe/Moscow",
+            "working_windows": [
+                {"weekdays": [1, 2, 3, 4, 5], "start": "09:00", "end": "18:00"}
+            ],
+            "holidays": [],
+            "production_calendar": {
+                "schema": 1,
+                "provider": "isdayoff.ru",
+                "country": "ru",
+                "years": [2026],
+                "day_overrides": [
+                    {
+                        "date": "2026-08-17",
+                        "working_windows": [],
+                        "handoff_windows": [],
+                    },
+                    {
+                        "date": "2026-08-22",
+                        "working_windows": [{"start": "09:00", "end": "18:00"}],
+                        "handoff_windows": [{"start": "09:00", "end": "18:00"}],
+                    },
+                    {
+                        "date": "2026-08-18",
+                        "working_windows": [{"start": "09:00", "end": "17:00"}],
+                    },
+                ],
+            },
+        }
+        intervals = work_metrics.calendar_intervals(
+            calendar,
+            (
+                datetime.fromisoformat("2026-08-17T00:00:00+00:00"),
+                datetime.fromisoformat("2026-08-23T00:00:00+00:00"),
+            ),
+        )
+        local_intervals = [
+            (start.isoformat(), end.isoformat()) for start, end in intervals
+        ]
+        self.assertNotIn(
+            ("2026-08-17T06:00:00+00:00", "2026-08-17T15:00:00+00:00"),
+            local_intervals,
+        )
+        self.assertIn(
+            ("2026-08-18T06:00:00+00:00", "2026-08-18T14:00:00+00:00"),
+            local_intervals,
+        )
+        self.assertIn(
+            ("2026-08-22T06:00:00+00:00", "2026-08-22T15:00:00+00:00"),
+            local_intervals,
+        )
+
+    def test_project_override_wins_over_provider_calendar(self) -> None:
+        calendar: dict[str, object] = {
+            "schema": 1,
+            "calendar_id": "project-1",
+            "timezone": "Europe/Moscow",
+            "working_windows": [
+                {"weekdays": [1, 2, 3, 4, 5], "start": "09:00", "end": "18:00"}
+            ],
+            "production_calendar": {
+                "schema": 1,
+                "provider": "isdayoff.ru",
+                "country": "ru",
+                "years": [2026],
+                "day_overrides": [
+                    {
+                        "date": "2026-08-22",
+                        "working_windows": [{"start": "09:00", "end": "18:00"}],
+                    }
+                ],
+            },
+            "day_overrides": [
+                {"date": "2026-08-22", "working_windows": []}
+            ],
+        }
+        intervals = work_metrics.calendar_intervals(
+            calendar,
+            (
+                datetime.fromisoformat("2026-08-22T00:00:00+00:00"),
+                datetime.fromisoformat("2026-08-23T00:00:00+00:00"),
+            ),
+        )
+        self.assertEqual(intervals, [])
+
+    def test_production_calendar_fails_outside_materialized_years(self) -> None:
+        calendar: dict[str, object] = {
+            "schema": 1,
+            "calendar_id": "project-1",
+            "timezone": "Europe/Moscow",
+            "working_windows": [
+                {"weekdays": [1, 2, 3, 4, 5], "start": "09:00", "end": "18:00"}
+            ],
+            "production_calendar": {
+                "schema": 1,
+                "provider": "isdayoff.ru",
+                "country": "ru",
+                "years": [2026],
+                "day_overrides": [],
+            },
+        }
+        with self.assertRaisesRegex(
+            work_metrics.WorkMetricsError, "does not cover year 2027"
+        ):
+            work_metrics.calendar_intervals(
+                calendar,
+                (
+                    datetime.fromisoformat("2027-01-11T06:00:00+00:00"),
+                    datetime.fromisoformat("2027-01-11T15:00:00+00:00"),
+                ),
+            )
+
     def test_night_work_counts_without_manual_pause_or_background_business_time(self) -> None:
         calendar: dict[str, object] = {
             "schema": 1,
