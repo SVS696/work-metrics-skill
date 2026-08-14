@@ -594,9 +594,6 @@ def reconcile(payload: Any) -> dict[str, Any]:
         # Explicit deferral suspends WIP, but observed work outside the schedule
         # remains real work and must never be erased by the calendar.
         business = merge_intervals(subtract_intervals(scheduled, deferred_intervals) + active)
-    business_elapsed_seconds = (
-        interval_seconds(business) if isinstance(business_calendar, dict) else None
-    )
     scheduled_nonworking_seconds = (
         max(0, elapsed_seconds - interval_seconds(scheduled))
         if isinstance(business_calendar, dict)
@@ -643,13 +640,24 @@ def reconcile(payload: Any) -> dict[str, Any]:
         ]
         handoff_active = [
             item
-            for item in (clamp_interval(interval, handoff_window) for interval in active)
+            for interval in active
+            if interval[0] > ready_at
+            for item in (clamp_interval(interval, handoff_window),)
             if item
         ]
-        handoff_business = merge_intervals(
-            subtract_intervals(handoff_scheduled, handoff_deferred) + handoff_active
+        handoff_available = subtract_intervals(handoff_scheduled, handoff_deferred)
+        handoff_wait_business_seconds = interval_seconds(handoff_available)
+        # Ready means the primary analysis is complete. Available office time
+        # spent only waiting for the human handoff must not teach the model that
+        # the analysis itself took longer. Real activity remains real work.
+        business = merge_intervals(
+            subtract_intervals(business, handoff_available) + handoff_active
         )
-        handoff_wait_business_seconds = interval_seconds(handoff_business)
+        if handoff_active:
+            warnings.append("activity_after_ready_for_handoff")
+    business_elapsed_seconds = (
+        interval_seconds(business) if isinstance(business_calendar, dict) else None
+    )
     training_eligible = bool(
         window_payload["terminal"] and coverage_complete and active_seconds > 0
     )

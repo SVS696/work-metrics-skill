@@ -116,7 +116,8 @@ def automation_source(ledger: Any, *, window_end: datetime) -> tuple[str, dict[s
         if not isinstance(milestone, dict):
             continue
         at = milestone.get("at")
-        pulse(f"milestone-{index}-{milestone.get('kind', 'unknown')}", at, "milestone")
+        milestone_at = parse_at(at, field=f"milestone[{index}].at")
+        timestamps.append(milestone_at)
         state = {
             "ready_for_handoff": "ready_for_handoff",
             "development_handoff": "handoff",
@@ -126,7 +127,7 @@ def automation_source(ledger: Any, *, window_end: datetime) -> tuple[str, dict[s
                 {
                     "id": f"milestone-state-{index}",
                     "type": "state_marker",
-                    "at": parse_at(at, field=f"milestone[{index}].at").isoformat(),
+                    "at": milestone_at.isoformat(),
                     "state": state,
                 }
             )
@@ -135,7 +136,7 @@ def automation_source(ledger: Any, *, window_end: datetime) -> tuple[str, dict[s
                 {
                     "id": f"milestone-count-{index}",
                     "type": "metric_observation",
-                    "at": parse_at(at, field=f"milestone[{index}].at").isoformat(),
+                    "at": milestone_at.isoformat(),
                     "metric": milestone["kind"],
                     "value": 1,
                     "unit": "count",

@@ -152,6 +152,9 @@ preliminary analysis до первой фактической передачи �
   `deferred_seconds` — разложение календарного срока;
 - `ready_for_handoff_at`, `handoff_wait_seconds` и
   `handoff_wait_business_seconds` — ожидание между готовностью и передачей;
+  доступное рабочее ожидание вычитается из обучаемого
+  `business_elapsed_seconds`, а фактическая активность после ready сохраняется и
+  даёт reconciliation warning;
 - `explicit_pause_seconds`;
 - `inferred_idle_seconds`;
 - `training_eligible`.
