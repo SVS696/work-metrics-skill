@@ -146,6 +146,46 @@ class WorkMetricsTests(unittest.TestCase):
         self.assertEqual(values["ready_for_handoff_at"], "2026-08-14T16:00:00+00:00")
         self.assertEqual(values["handoff_wait_seconds"], 63 * 3600)
         self.assertEqual(values["handoff_wait_business_seconds"], 3600)
+        self.assertEqual(values["business_elapsed_seconds"], 3600)
+
+    def test_real_activity_after_ready_is_kept_but_does_not_restore_idle_wait(self) -> None:
+        calendar: dict[str, object] = {
+            "schema": 1,
+            "calendar_id": "project-1",
+            "timezone": "Europe/Moscow",
+            "working_windows": [
+                {"weekdays": [1, 2, 3, 4, 5], "start": "09:00", "end": "18:00"}
+            ],
+            "holidays": [],
+        }
+        events = [
+            pulse("before-ready", "2026-08-14T17:00:00+03:00"),
+            {
+                "id": "ready",
+                "type": "state_marker",
+                "at": "2026-08-14T19:00:00+03:00",
+                "state": "ready_for_handoff",
+            },
+            pulse("post-ready-work", "2026-08-17T09:30:00+03:00"),
+            {
+                "id": "handoff",
+                "type": "state_marker",
+                "at": "2026-08-17T10:00:00+03:00",
+                "state": "handoff",
+            },
+        ]
+        result = work_metrics.reconcile(
+            bundle(
+                [source("session-a", events)],
+                started_at="2026-08-14T17:00:00+03:00",
+                ended_at="2026-08-17T10:00:00+03:00",
+                business_calendar=calendar,
+            )
+        )
+        values = activity_values(result)
+        self.assertEqual(values["business_elapsed_seconds"], 3630)
+        self.assertEqual(values["handoff_wait_business_seconds"], 3600)
+        self.assertIn("activity_after_ready_for_handoff", result["warnings"])
 
     def test_short_gaps_merge_and_long_gaps_become_inferred_idle(self) -> None:
         result = work_metrics.reconcile(

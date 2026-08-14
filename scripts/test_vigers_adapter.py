@@ -134,7 +134,7 @@ class VigersAdapterTests(unittest.TestCase):
                 item for item in result["metric_results"] if item["provider"] == "activity-time"
             )
             self.assertEqual(activity["values"]["elapsed_seconds"], 1800)
-            self.assertEqual(activity["values"]["business_elapsed_seconds"], 1800)
+            self.assertEqual(activity["values"]["business_elapsed_seconds"], 1200)
             self.assertEqual(activity["values"]["handoff_wait_seconds"], 600)
             self.assertTrue(
                 all(
