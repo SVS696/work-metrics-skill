@@ -156,6 +156,11 @@ preliminary analysis до первой фактической передачи �
 }
 ```
 
+Agent-ledger adapters используют также `agent_run_status` и
+`finding_disposition` с dimensions `status` либо
+`accepted|rejected|duplicate|verified`. Отсутствие verification receipt означает
+неполную классификацию, а не нулевое значение.
+
 ## Результат reconciliation
 
 `metric_results` содержит независимые providers. Обязательный provider
