@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -198,12 +198,21 @@ def agent_source(path: Path, *, expected_case_id: str) -> dict[str, Any]:
                 "category": "model",
                 "attributes": {
                     "role": run.get("role"),
+                    "role_mode": run.get("role_mode"),
                     "model": run.get("model"),
+                    "status": run.get("status", "completed"),
+                    "lenses": run.get("lenses", []),
                 },
             }
         )
         observations: list[tuple[str, Any, str, dict[str, Any]]] = [
             ("model_run", 1, "count", {"model": run.get("model", "unknown")}),
+            (
+                "agent_run_status",
+                1,
+                "count",
+                {"status": run.get("status", "completed")},
+            ),
             ("retries", run.get("retries"), "count", {}),
             ("input_tokens", run.get("input_tokens"), "count", {}),
             ("output_tokens", run.get("output_tokens"), "count", {}),
@@ -214,6 +223,19 @@ def agent_source(path: Path, *, expected_case_id: str) -> dict[str, Any]:
                 ("findings", findings.get(severity), "count", {"severity": severity})
                 for severity in ("blocker", "major", "minor")
             )
+        verification = run.get("verification")
+        if isinstance(verification, dict):
+            dispositions = verification.get("dispositions", {})
+            if isinstance(dispositions, dict):
+                observations.extend(
+                    (
+                        "finding_disposition",
+                        dispositions.get(disposition),
+                        "count",
+                        {"disposition": disposition},
+                    )
+                    for disposition in ("accepted", "rejected", "duplicate", "verified")
+                )
         for metric_index, (metric, value, unit, dimensions) in enumerate(
             observations, start=1
         ):

@@ -1,6 +1,6 @@
 ---
 name: work-metrics
-description: "Собирает и согласует журналы активности из разных сессий, харнесов, моделей и инструментов, восстанавливает активные интервалы, паузы, проектные рабочие окна и отложенное состояние, оценивает полноту покрытия и считает расширяемые метрики работы. Используй для active/business/calendar таймеров, постфактум-восстановления активности, сверки checkpoint-ов, проектной калибровки времени и других наблюдаемых метрик; Vigers подключается как один из адаптеров, но модуль не зависит от постановок."
+description: "Собирает и согласует журналы активности из разных сессий, харнесов, моделей и инструментов, восстанавливает активные интервалы, паузы, проектные рабочие окна и отложенное состояние, оценивает полноту покрытия и считает расширяемые метрики работы. Используй для active/business/calendar таймеров, постфактум-восстановления активности, сверки checkpoint-ов, проектной калибровки времени, стоимости и finding-yield ролевых проходов; Vigers и Delivery Engineering подключаются как адаптеры, но модуль от них не зависит."
 ---
 
 # Work Metrics
@@ -90,6 +90,21 @@ case/project identity, coverage и eligibility до использования �
 `observed-counters` суммирует нормализованные observations, например tokens,
 retries или findings. Новую метрику добавляй отдельным provider над тем же
 bundle; не меняй контракт событий ради конкретного процесса.
+
+Для Vigers и Delivery Engineering агрегируй уже записанные model ledgers без
+новых вызовов:
+
+```text
+python3 {baseDir}/scripts/review_yield.py \
+  --agent-ledger <case-a>/agent-ledger.json \
+  --agent-ledger <case-b>/agent-ledger.json \
+  --write <review-yield.json>
+```
+
+Сравнивай роли, modes, models и versioned lenses по duration/tokens/retries,
+reported/accepted/rejected/duplicate/verified. Run без final receipt остаётся
+`unclassified`; не выдавай его за нулевую полезность. Lens-строки не складывай
+между собой, если один run имел несколько lenses.
 
 ## Проверка
 

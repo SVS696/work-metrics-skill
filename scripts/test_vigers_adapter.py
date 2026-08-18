@@ -70,11 +70,22 @@ class VigersAdapterTests(unittest.TestCase):
                             "at": "2026-08-13T10:05:00+00:00",
                             "duration_seconds": 60,
                             "role": "analyst",
+                            "role_mode": "analysis",
                             "model": "test",
+                            "status": "completed",
+                            "lenses": ["requirements@1"],
                             "input_tokens": 100,
                             "output_tokens": 20,
                             "retries": 1,
                             "findings": {"blocker": 0, "major": 2, "minor": 1},
+                            "verification": {
+                                "dispositions": {
+                                    "accepted": 2,
+                                    "rejected": 0,
+                                    "duplicate": 1,
+                                    "verified": 1,
+                                }
+                            },
                         }
                     ],
                 },
@@ -148,6 +159,20 @@ class VigersAdapterTests(unittest.TestCase):
             )
             token_total = next(item for item in counters["values"] if item["metric"] == "input_tokens")
             self.assertEqual(token_total["value"], 100)
+            duplicate_total = next(
+                item
+                for item in counters["values"]
+                if item["metric"] == "finding_disposition"
+                and item["dimensions"] == {"disposition": "duplicate"}
+            )
+            self.assertEqual(duplicate_total["value"], 1)
+            verified_total = next(
+                item
+                for item in counters["values"]
+                if item["metric"] == "finding_disposition"
+                and item["dimensions"] == {"disposition": "verified"}
+            )
+            self.assertEqual(verified_total["value"], 1)
 
     def test_logs_complete_requires_an_actual_harness_log(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

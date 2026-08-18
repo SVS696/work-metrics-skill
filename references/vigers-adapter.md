@@ -6,7 +6,8 @@
 ## Входы
 
 - `automation-timing.json`: окно, explicit pauses, publication и handoff;
-- `agent-ledger.json`: точные интервалы модельных проходов и счётчики;
+- `agent-ledger.json`: точные интервалы, outcome, versioned lenses, artifact
+  bindings и finding dispositions модельных проходов;
 - один или несколько timestamped JSONL журналов Codex/Claude/другого харнеса;
 - `timing-forecast.json`: `project_key` и связь с исходным прогнозом.
 - опциональный `.vigers/timing-calendar.json`: рабочие и handoff-окна проекта;
